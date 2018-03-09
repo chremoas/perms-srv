@@ -1,0 +1,29 @@
+matrix:
+  GO_VERSION:
+    - 1.8
+    - 1.9
+
+pipeline:
+  build:
+    image: golang:${GO_VERSION}
+    commands:
+      - export GOPATH=/drone
+      - export PATH=$PATH:$GOPATH/bin
+      - go get -t -v ./...
+      - go build
+      - go test
+
+#  discord:
+#    image: appleboy/drone-discord
+#    secrets: [ discord_webhook_id, discord_webhook_token ]
+#    webhook_id: $DISCORD_WEBHOOK_ID
+#    webhook_token: $DISCORD_WEBHOOK_TOKEN
+#    tts: true
+#    username: Drone (esi-srv)
+#    message: |
+#      {{ #success build.status }}
+#        build {{ build.number }} succeeded. Good job.
+#      {{ else }}
+#        build {{ build.number }} failed. Fix me please.
+#      {{ /success }}
+

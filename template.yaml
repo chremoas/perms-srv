@@ -1,0 +1,5 @@
+namespace: com.abaeve.bot.command
+name: template
+registry:
+  hostname: localhost
+  port: 8500
