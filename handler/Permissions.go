@@ -8,6 +8,7 @@ import (
 	//"github.com/micro/go-micro/client"
 	"golang.org/x/net/context"
 	"strings"
+	"github.com/chremoas/services-common/config"
 )
 
 type permissionsHandler struct {
@@ -15,15 +16,17 @@ type permissionsHandler struct {
 	Redis *redis.Client
 }
 
-func NewPermissionsHandler() permsrv.PermissionsHandler {
-	redisClient := redis.Init("localhost:6379", "", 0, "perms-srv")
+func NewPermissionsHandler(config *config.Configuration) permsrv.PermissionsHandler {
+	addr := fmt.Sprintf("%s:%d", config.Redis.Host, config.Redis.Port)
+	//redisClient := redis.Init("localhost:6379", "", 0, "perms-srv")
+	redisClient := redis.Init(addr, config.Redis.Password, config.Redis.Database, config.LookupService("srv", "perms"))
 
 	_, err := redisClient.Client.Ping().Result()
 	if err != nil {
 		panic(err)
 	}
 
-	exists, err := redisClient.Client.Exists(redisClient.KeyName("permission:description:server_admins")).Result()
+	exists, err := redisClient.Client.Exists(redisClient.KeyName("description:server_admins")).Result()
 
 	if err != nil {
 		fmt.Println(err)
@@ -33,8 +36,7 @@ func NewPermissionsHandler() permsrv.PermissionsHandler {
 		fmt.Println("Permissions not setup, please edit the config file and run chremoas-ctl reconfigure")
 	}
 
-	admins, err := redisClient.Client.SMembers(redisClient.KeyName("permission:members:server_admins")).Result()
-	fmt.Printf("admins: %+v\n", admins)
+	admins, err := redisClient.Client.SMembers(redisClient.KeyName("members:server_admins")).Result()
 
 	if len(admins) == 0 {
 		fmt.Println("No admins defined, please edit the config file and run chremoas-ctl reconfigure")
@@ -44,14 +46,13 @@ func NewPermissionsHandler() permsrv.PermissionsHandler {
 }
 
 func (h *permissionsHandler) Perform(ctx context.Context, request *permsrv.PermissionsRequest, response *permsrv.PerformResponse) error {
-	serverAdmins := h.Redis.KeyName("permission:members:server_admins")
+	serverAdmins := h.Redis.KeyName("members:server_admins")
 	isServerAdmin, err := h.Redis.Client.SIsMember(serverAdmins, request.User).Result()
 
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("isServerAdmin: %v\n", isServerAdmin)
 	// Doesn't matter what other permissions you have. If you are a server_admin you are god.
 	if isServerAdmin {
 		response.CanPerform = true
@@ -59,14 +60,12 @@ func (h *permissionsHandler) Perform(ctx context.Context, request *permsrv.Permi
 	}
 
 	for perm := range request.PermissionsList {
-		permName := h.Redis.KeyName(fmt.Sprintf("permission:members:%s", request.PermissionsList[perm]))
+		permName := h.Redis.KeyName(fmt.Sprintf("members:%s", request.PermissionsList[perm]))
 		isMember, err := h.Redis.Client.SIsMember(permName, request.User).Result()
 
 		if err != nil {
 			return err
 		}
-
-		fmt.Printf("permName: %s isMember: %v\n", permName, isMember)
 
 		if isMember {
 			response.CanPerform = true
@@ -79,7 +78,7 @@ func (h *permissionsHandler) Perform(ctx context.Context, request *permsrv.Permi
 }
 
 func (h *permissionsHandler) AddPermission(ctx context.Context, request *permsrv.Permission, response *permsrv.Permission) error {
-	permName := h.Redis.KeyName(fmt.Sprintf("permission:description:%s", request.Name))
+	permName := h.Redis.KeyName(fmt.Sprintf("description:%s", request.Name))
 
 	if request.Name == "server_admins" {
 		return errors.New("You cannot add the server_admins group.")
@@ -88,15 +87,14 @@ func (h *permissionsHandler) AddPermission(ctx context.Context, request *permsrv
 	exists, err := h.Redis.Client.Exists(permName).Result()
 
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
 
 	if exists == 1 {
 		return fmt.Errorf("Permission group `%s` already exists.", request.Name)
 	}
 
-	foo, err := h.Redis.Client.Set(permName, request.Description, 0).Result()
-	fmt.Printf("Set: %+v\n", foo)
+	_, err = h.Redis.Client.Set(permName, request.Description, 0).Result()
 
 	if err != nil {
 		return err
@@ -107,8 +105,8 @@ func (h *permissionsHandler) AddPermission(ctx context.Context, request *permsrv
 }
 
 func (h *permissionsHandler) AddPermissionUser(ctx context.Context, request *permsrv.PermissionUser, response *permsrv.PermissionUser) error {
-	permName := h.Redis.KeyName(fmt.Sprintf("permission:members:%s", request.Permission))
-	permDesc := h.Redis.KeyName(fmt.Sprintf("permission:description:%s", request.Permission))
+	permName := h.Redis.KeyName(fmt.Sprintf("members:%s", request.Permission))
+	permDesc := h.Redis.KeyName(fmt.Sprintf("description:%s", request.Permission))
 
 	if request.Permission == "server_admins" {
 		return errors.New("You cannot add users to the server_admins group.")
@@ -117,15 +115,14 @@ func (h *permissionsHandler) AddPermissionUser(ctx context.Context, request *per
 	exists, err := h.Redis.Client.Exists(permDesc).Result()
 
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
 
 	if exists == 0 {
 		return fmt.Errorf("Permission group `%s` doesn't exists.", request.Permission)
 	}
 
-	foo, err := h.Redis.Client.SAdd(permName, request.User).Result()
-	fmt.Printf("SAdd: %+v\n", foo)
+	_, err = h.Redis.Client.SAdd(permName, request.User).Result()
 
 	if err != nil {
 		return err
@@ -136,8 +133,8 @@ func (h *permissionsHandler) AddPermissionUser(ctx context.Context, request *per
 }
 
 func (h *permissionsHandler) RemovePermission(ctx context.Context, request *permsrv.Permission, response *permsrv.Permission) error {
-	permName := h.Redis.KeyName(fmt.Sprintf("permission:description:%s", request.Name))
-	permMembers := h.Redis.KeyName(fmt.Sprintf("permission:members:%s", request.Name))
+	permName := h.Redis.KeyName(fmt.Sprintf("description:%s", request.Name))
+	permMembers := h.Redis.KeyName(fmt.Sprintf("members:%s", request.Name))
 
 	if request.Name == "server_admins" {
 		return errors.New("You cannot delete the server_admins group.")
@@ -146,7 +143,7 @@ func (h *permissionsHandler) RemovePermission(ctx context.Context, request *perm
 	exists, err := h.Redis.Client.Exists(permName).Result()
 
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
 
 	if exists == 0 {
@@ -155,15 +152,11 @@ func (h *permissionsHandler) RemovePermission(ctx context.Context, request *perm
 
 	members, err := h.Redis.Client.SMembers(permMembers).Result()
 
-	fmt.Printf("Members: %+v\n", members)
-	fmt.Printf("Member Count: %d\n", len(members))
-
 	if len(members) > 0 {
 		return fmt.Errorf("Permission group `%s` not empty.", request.Name)
 	}
 
-	foo, err := h.Redis.Client.Del(permName).Result()
-	fmt.Printf("Del: %+v\n", foo)
+	_, err = h.Redis.Client.Del(permName).Result()
 
 	if err != nil {
 		return err
@@ -174,8 +167,8 @@ func (h *permissionsHandler) RemovePermission(ctx context.Context, request *perm
 }
 
 func (h *permissionsHandler) RemovePermissionUser(ctx context.Context, request *permsrv.PermissionUser, response *permsrv.PermissionUser) error {
-	permName := h.Redis.KeyName(fmt.Sprintf("permission:members:%s", request.Permission))
-	permDesc := h.Redis.KeyName(fmt.Sprintf("permission:description:%s", request.Permission))
+	permName := h.Redis.KeyName(fmt.Sprintf("members:%s", request.Permission))
+	permDesc := h.Redis.KeyName(fmt.Sprintf("description:%s", request.Permission))
 
 	if request.Permission == "server_admins" {
 		return errors.New("You cannot remove users from the server_admins group.")
@@ -184,7 +177,7 @@ func (h *permissionsHandler) RemovePermissionUser(ctx context.Context, request *
 	exists, err := h.Redis.Client.Exists(permDesc).Result()
 
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
 
 	if exists == 0 {
@@ -196,8 +189,7 @@ func (h *permissionsHandler) RemovePermissionUser(ctx context.Context, request *
 		return fmt.Errorf("`%s` not a member of group '%s'", request.User, request.Permission)
 	}
 
-	foo, err := h.Redis.Client.SRem(permName, request.User).Result()
-	fmt.Printf("SRem: %+v\n", foo)
+	_, err = h.Redis.Client.SRem(permName, request.User).Result()
 
 	if err != nil {
 		return err
@@ -208,7 +200,7 @@ func (h *permissionsHandler) RemovePermissionUser(ctx context.Context, request *
 }
 
 func (h *permissionsHandler) ListPermissions(ctx context.Context, request *permsrv.NilRequest, response *permsrv.PermissionsResponse) error {
-	perms, err := h.Redis.Client.Keys(h.Redis.KeyName("permission:description:*")).Result()
+	perms, err := h.Redis.Client.Keys(h.Redis.KeyName("description:*")).Result()
 
 	if err != nil {
 		return err
@@ -232,7 +224,7 @@ func (h *permissionsHandler) ListPermissions(ctx context.Context, request *perms
 
 func (h *permissionsHandler) ListPermissionUsers(ctx context.Context, request *permsrv.UsersRequest, response *permsrv.UsersResponse) error {
 	var userlist []string
-	permName := h.Redis.KeyName(fmt.Sprintf("permission:members:%s", request.Permission))
+	permName := h.Redis.KeyName(fmt.Sprintf("members:%s", request.Permission))
 
 	users, err := h.Redis.Client.SMembers(permName).Result()
 
@@ -240,9 +232,7 @@ func (h *permissionsHandler) ListPermissionUsers(ctx context.Context, request *p
 		return err
 	}
 
-	fmt.Printf("users: %+v\n", users)
 	for user := range users {
-		fmt.Printf("user: %+v\n", users[user])
 		userlist = append(userlist, users[user])
 	}
 
@@ -251,7 +241,7 @@ func (h *permissionsHandler) ListPermissionUsers(ctx context.Context, request *p
 }
 
 func (h *permissionsHandler) ListUserPermissions(ctx context.Context, request *permsrv.PermissionUser, response *permsrv.PermissionsResponse) error {
-	perms, err := h.Redis.Client.Keys(h.Redis.KeyName("permission:members:*")).Result()
+	perms, err := h.Redis.Client.Keys(h.Redis.KeyName("members:*")).Result()
 
 	if err != nil {
 		return err
@@ -261,7 +251,7 @@ func (h *permissionsHandler) ListUserPermissions(ctx context.Context, request *p
 	for perm := range perms {
 		permName := strings.Split(perms[perm], ":")
 
-		permDesc := h.Redis.KeyName(fmt.Sprintf("permission:description:%s", permName[len(permName)-1]))
+		permDesc := h.Redis.KeyName(fmt.Sprintf("description:%s", permName[len(permName)-1]))
 		permDescription, err := h.Redis.Client.Get(permDesc).Result()
 
 		if err != nil {
