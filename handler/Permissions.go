@@ -33,7 +33,7 @@ func NewPermissionsHandler() permsrv.PermissionsHandler {
 		fmt.Println("Permissions not setup, please edit the config file and run chremoas-ctl reconfigure")
 	}
 
-	admins, err := redisClient.Client.LRange(redisClient.KeyName("permission:members:server_admins"), 0, -1).Result()
+	admins, err := redisClient.Client.SMembers(redisClient.KeyName("permission:members:server_admins")).Result()
 	fmt.Printf("admins: %+v\n", admins)
 
 	if len(admins) == 0 {
@@ -44,7 +44,38 @@ func NewPermissionsHandler() permsrv.PermissionsHandler {
 }
 
 func (h *permissionsHandler) Perform(ctx context.Context, request *permsrv.PermissionsRequest, response *permsrv.PerformResponse) error {
-	return errors.New("Not Implemented")
+	serverAdmins := h.Redis.KeyName("permission:members:server_admins")
+	isServerAdmin, err := h.Redis.Client.SIsMember(serverAdmins, request.User).Result()
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("isServerAdmin: %v\n", isServerAdmin)
+	// Doesn't matter what other permissions you have. If you are a server_admin you are god.
+	if isServerAdmin {
+		response.CanPerform = true
+		return nil
+	}
+
+	for perm := range request.PermissionsList {
+		permName := h.Redis.KeyName(fmt.Sprintf("permission:members:%s", request.PermissionsList[perm]))
+		isMember, err := h.Redis.Client.SIsMember(permName, request.User).Result()
+
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("permName: %s isMember: %v\n", permName, isMember)
+
+		if isMember {
+			response.CanPerform = true
+			return nil
+		}
+	}
+
+	response.CanPerform = false
+	return nil
 }
 
 func (h *permissionsHandler) AddPermission(ctx context.Context, request *permsrv.Permission, response *permsrv.Permission) error {
