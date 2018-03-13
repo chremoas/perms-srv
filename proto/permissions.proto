@@ -5,10 +5,12 @@ package chremoas.perms;
 service Permissions {
     rpc Perform (PermissionsRequest) returns (PerformResponse) {};
     rpc AddPermission (Permission) returns (Permission) {};
+    rpc AddPermissionUser (PermissionUser) returns (PermissionUser) {};
     rpc RemovePermission (Permission) returns (Permission) {};
+    rpc RemovePermissionUser (PermissionUser) returns (PermissionUser) {};
     rpc ListPermissions (NilRequest) returns (PermissionsResponse) {};
     rpc ListPermissionUsers (UsersRequest) returns (UsersResponse) {};
-    rpc ListUserPermissions (PermissionsRequest) returns (PermissionsResponse) {};
+    rpc ListUserPermissions (PermissionUser) returns (PermissionsResponse) {};
 }
 
 message NilRequest{}
@@ -18,7 +20,7 @@ message UsersRequest {
 }
 
 message UsersResponse {
-    repeated int64 UserList = 1;
+    repeated string UserList = 1;
 }
 
 message PermissionsRequest {
@@ -29,6 +31,11 @@ message PermissionsRequest {
 message Permission {
     string Name = 1;
     string Description = 2;
+}
+
+message PermissionUser {
+    string User = 1;
+    string Permission = 2;
 }
 
 message PermissionsResponse {
