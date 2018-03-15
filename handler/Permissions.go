@@ -5,7 +5,6 @@ import (
 	"fmt"
 	permsrv "github.com/chremoas/perms-srv/proto"
 	redis "github.com/chremoas/services-common/redis"
-	//"github.com/micro/go-micro/client"
 	"golang.org/x/net/context"
 	"strings"
 	"github.com/chremoas/services-common/config"
@@ -18,7 +17,6 @@ type permissionsHandler struct {
 
 func NewPermissionsHandler(config *config.Configuration) permsrv.PermissionsHandler {
 	addr := fmt.Sprintf("%s:%d", config.Redis.Host, config.Redis.Port)
-	//redisClient := redis.Init("localhost:6379", "", 0, "perms-srv")
 	redisClient := redis.Init(addr, config.Redis.Password, config.Redis.Database, config.LookupService("srv", "perms"))
 
 	_, err := redisClient.Client.Ping().Result()
