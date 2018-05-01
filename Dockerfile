@@ -1,17 +1,7 @@
-FROM arm32v6/alpine
-LABEL maintainer="maurer.it@gmail.com"
+FROM scratch
+MAINTAINER Brian Hechinger <wonko@4amlunch.net>
 
-RUN apk update && apk upgrade && apk add ca-certificates
-
-ADD ./template /
-WORKDIR /
-
-RUN mkdir /etc/chremoas
+ADD perms-srv-linux-amd64 perms-srv
 VOLUME /etc/chremoas
 
-RUN rm -rf /var/cache/apk/*
-
-ENV MICRO_REGISTRY_ADDRESS chremoas-consul:8500
-
-CMD [""]
-ENTRYPOINT ["./template", "--configuration_file", "/etc/chremoas/template.yaml"]
+ENTRYPOINT ["/perms-srv", "--configuration_file", "/etc/chremoas/auth-bot.yaml"]
