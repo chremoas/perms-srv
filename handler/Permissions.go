@@ -5,6 +5,7 @@ import (
 	"fmt"
 	permsrv "github.com/chremoas/perms-srv/proto"
 	redis "github.com/chremoas/services-common/redis"
+	common "github.com/chremoas/services-common/command"
 	"golang.org/x/net/context"
 	"strings"
 	"github.com/chremoas/services-common/config"
@@ -256,13 +257,14 @@ func (h *permissionsHandler) ListUserPermissions(ctx context.Context, request *p
 			return err
 		}
 
-		isMember, err := h.Redis.Client.SIsMember(perms[perm], request.User).Result()
+		userId := common.ExtractUserId(request.User)
+		isMember, err := h.Redis.Client.SIsMember(perms[perm], userId).Result()
 
 		if err != nil {
 			return err
 		}
 
-		if !isMember {
+		if isMember {
 			response.PermissionsList = append(response.PermissionsList,
 				&permsrv.Permission{Name: permName[len(permName)-1], Description: permDescription})
 		}
