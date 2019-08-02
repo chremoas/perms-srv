@@ -4,3 +4,5 @@
 # Architecture specific extensions/prefixes
 
 vendor/
+/vet.report
+/perms-srv-linux-amd64
