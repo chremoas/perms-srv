@@ -18,7 +18,7 @@ type permissionsHandler struct {
 
 func NewPermissionsHandler(config *config.Configuration) permsrv.PermissionsHandler {
 	//addr := fmt.Sprintf("%s:%d", config.Redis.Host, config.Redis.Port)
-	redisClient := redis.Init("Dunno")
+	redisClient := redis.Init(config.LookupService("srv", "perms"))
 
 	_, err := redisClient.Client.Ping().Result()
 	if err != nil {
