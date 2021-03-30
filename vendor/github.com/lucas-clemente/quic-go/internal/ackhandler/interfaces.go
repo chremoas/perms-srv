@@ -8,14 +8,26 @@ import (
 	"github.com/lucas-clemente/quic-go/quictrace"
 )
 
+// A Packet is a packet
+type Packet struct {
+	PacketNumber    protocol.PacketNumber
+	Frames          []Frame
+	LargestAcked    protocol.PacketNumber // InvalidPacketNumber if the packet doesn't contain an ACK
+	Length          protocol.ByteCount
+	EncryptionLevel protocol.EncryptionLevel
+	SendTime        time.Time
+
+	includedInBytesInFlight bool
+}
+
 // SentPacketHandler handles ACKs received for outgoing packets
 type SentPacketHandler interface {
 	// SentPacket may modify the packet
 	SentPacket(packet *Packet)
-	SentPacketsAsRetransmission(packets []*Packet, retransmissionOf protocol.PacketNumber)
 	ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, recvTime time.Time) error
 	DropPackets(protocol.EncryptionLevel)
 	ResetForRetry() error
+	SetHandshakeComplete()
 
 	// The SendMode determines if and what kind of packets can be sent.
 	SendMode() SendMode
@@ -31,8 +43,7 @@ type SentPacketHandler interface {
 
 	// only to be called once the handshake is complete
 	GetLowestPacketNotConfirmedAcked() protocol.PacketNumber
-	DequeuePacketForRetransmission() *Packet
-	DequeueProbePacket() (*Packet, error)
+	QueueProbePacket(protocol.EncryptionLevel) bool /* was a packet queued */
 
 	PeekPacketNumber(protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen)
 	PopPacketNumber(protocol.EncryptionLevel) protocol.PacketNumber

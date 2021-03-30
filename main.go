@@ -41,6 +41,11 @@ func main() {
 }
 
 func initialize(config *config.Configuration) error {
-	permsrv.RegisterPermissionsHandler(service.Server(), handler.NewPermissionsHandler(config))
+	h, err := handler.NewPermissionsHandler(config, logger)
+	if err != nil {
+		return err
+	}
+
+	permsrv.RegisterPermissionsHandler(service.Server(), h)
 	return nil
 }

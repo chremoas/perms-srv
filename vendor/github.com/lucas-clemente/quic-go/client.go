@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -253,15 +252,13 @@ func populateClientConfig(config *Config, createdPacketConn bool) *Config {
 		KeepAlive:                             config.KeepAlive,
 		StatelessResetKey:                     config.StatelessResetKey,
 		QuicTracer:                            config.QuicTracer,
+		TokenStore:                            config.TokenStore,
 	}
 }
 
 func (c *client) dial(ctx context.Context) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
-
-	if err := c.createNewTLSSession(c.version); err != nil {
-		return err
-	}
+	c.createNewTLSSession(c.version)
 	err := c.establishSecureConnection(ctx)
 	if err == errCloseForRecreating {
 		return c.dial(ctx)
@@ -292,7 +289,7 @@ func (c *client) establishSecureConnection(ctx context.Context) error {
 		return ctx.Err()
 	case err := <-errorChan:
 		return err
-	case <-c.handshakeChan:
+	case <-c.session.HandshakeComplete().Done():
 		// handshake successfully completed
 		return nil
 	}
@@ -340,6 +337,7 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 	c.logger.Infof("Received a Version Negotiation packet. Supported Versions: %s", hdr.SupportedVersions)
 	newVersion, ok := protocol.ChooseSupportedVersion(c.config.Versions, hdr.SupportedVersions)
 	if !ok {
+		//nolint:stylecheck
 		c.session.destroy(fmt.Errorf("No compatible QUIC version found. We support %s, server offered %s", c.config.Versions, hdr.SupportedVersions))
 		c.logger.Debugf("No compatible QUIC version found.")
 		return
@@ -355,45 +353,24 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 	c.initialPacketNumber = c.session.closeForRecreating()
 }
 
-func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
-	params := &handshake.TransportParameters{
-		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
-		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
-		InitialMaxStreamDataUni:        protocol.InitialMaxStreamData,
-		InitialMaxData:                 protocol.InitialMaxData,
-		IdleTimeout:                    c.config.IdleTimeout,
-		MaxBidiStreamNum:               protocol.StreamNum(c.config.MaxIncomingStreams),
-		MaxUniStreamNum:                protocol.StreamNum(c.config.MaxIncomingUniStreams),
-		MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
-		AckDelayExponent:               protocol.AckDelayExponent,
-		DisableMigration:               true,
-	}
-
+func (c *client) createNewTLSSession(_ protocol.VersionNumber) {
 	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	runner := &runner{
-		packetHandlerManager:    c.packetHandlers,
-		onHandshakeCompleteImpl: func(_ Session) { close(c.handshakeChan) },
-	}
-	sess, err := newClientSession(
+	c.session = newClientSession(
 		c.conn,
-		runner,
+		c.packetHandlers,
 		c.destConnID,
 		c.srcConnID,
 		c.config,
 		c.tlsConf,
 		c.initialPacketNumber,
-		params,
 		c.initialVersion,
 		c.logger,
 		c.version,
 	)
-	if err != nil {
-		return err
-	}
-	c.session = sess
+	c.mutex.Unlock()
+	// It's not possible to use the stateless reset token for the client's (first) connection ID,
+	// since there's no way to securely communicate it to the server.
 	c.packetHandlers.Add(c.srcConnID, c)
-	return nil
 }
 
 func (c *client) Close() error {

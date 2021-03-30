@@ -43,22 +43,22 @@ func (r *RTTStats) LatestRTT() time.Duration { return r.latestRTT }
 // May return Zero if no valid updates have occurred.
 func (r *RTTStats) SmoothedRTT() time.Duration { return r.smoothedRTT }
 
-// SmoothedOrInitialRTT returns the EWMA smoothed RTT for the connection.
-// If no valid updates have occurred, it returns the initial RTT.
-func (r *RTTStats) SmoothedOrInitialRTT() time.Duration {
-	if r.smoothedRTT != 0 {
-		return r.smoothedRTT
-	}
-	return defaultInitialRTT
-}
-
 // MeanDeviation gets the mean deviation
 func (r *RTTStats) MeanDeviation() time.Duration { return r.meanDeviation }
 
+// MaxAckDelay gets the max_ack_delay advertized by the peer
 func (r *RTTStats) MaxAckDelay() time.Duration { return r.maxAckDelay }
 
-func (r *RTTStats) PTO() time.Duration {
-	return r.SmoothedOrInitialRTT() + utils.MaxDuration(4*r.MeanDeviation(), protocol.TimerGranularity) + r.MaxAckDelay()
+// PTO gets the probe timeout duration.
+func (r *RTTStats) PTO(includeMaxAckDelay bool) time.Duration {
+	if r.SmoothedRTT() == 0 {
+		return 2 * defaultInitialRTT
+	}
+	pto := r.SmoothedRTT() + utils.MaxDuration(4*r.MeanDeviation(), protocol.TimerGranularity)
+	if includeMaxAckDelay {
+		pto += r.MaxAckDelay()
+	}
+	return pto
 }
 
 // UpdateRTT updates the RTT based on a new sample.

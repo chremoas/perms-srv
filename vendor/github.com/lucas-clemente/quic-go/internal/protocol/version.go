@@ -18,16 +18,16 @@ const (
 
 // The version numbers, making grepping easier
 const (
-	VersionTLS      VersionNumber = VersionMilestone0_12_0
+	VersionTLS      VersionNumber = VersionMilestone0_14
 	VersionWhatever VersionNumber = 1 // for when the version doesn't matter
 	VersionUnknown  VersionNumber = math.MaxUint32
 
-	VersionMilestone0_12_0 VersionNumber = 0xff000016 // QUIC WG draft-22
+	VersionMilestone0_14 VersionNumber = 0xff000018 // QUIC WG draft-24
 )
 
 // SupportedVersions lists the versions that the server supports
 // must be in sorted descending order
-var SupportedVersions = []VersionNumber{VersionMilestone0_12_0}
+var SupportedVersions = []VersionNumber{VersionMilestone0_14}
 
 // IsValidVersion says if the version is known to quic-go
 func IsValidVersion(v VersionNumber) bool {
@@ -40,19 +40,14 @@ func (vn VersionNumber) String() string {
 		return "whatever"
 	case VersionUnknown:
 		return "unknown"
-	case VersionMilestone0_12_0:
-		return "QUIC WG draft-22"
+	case VersionMilestone0_14:
+		return "QUIC WG draft-24"
 	default:
 		if vn.isGQUIC() {
 			return fmt.Sprintf("gQUIC %d", vn.toGQUICVersion())
 		}
 		return fmt.Sprintf("%#x", uint32(vn))
 	}
-}
-
-// ToAltSvc returns the representation of the version for the H2 Alt-Svc parameters
-func (vn VersionNumber) ToAltSvc() string {
-	return fmt.Sprintf("%d", vn)
 }
 
 func (vn VersionNumber) isGQUIC() bool {

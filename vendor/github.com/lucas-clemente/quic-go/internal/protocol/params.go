@@ -81,6 +81,11 @@ const MaxNonAckElicitingAcks = 19
 // prevents DoS attacks against the streamFrameSorter
 const MaxStreamFrameSorterGaps = 1000
 
+// MinStreamFrameBufferSize is the minimum data length of a received STREAM frame
+// that we use the buffer for. This protects against a DoS where an attacker would send us
+// very small STREAM frames to consume a lot of memory.
+const MinStreamFrameBufferSize = 128
+
 // MaxCryptoStreamOffset is the maximum offset allowed on any of the crypto streams.
 // This limits the size of the ClientHello and Certificates that can be received.
 const MaxCryptoStreamOffset = 16 * (1 << 10)
@@ -93,6 +98,10 @@ const DefaultIdleTimeout = 30 * time.Second
 
 // DefaultHandshakeTimeout is the default timeout for a connection until the crypto handshake succeeds.
 const DefaultHandshakeTimeout = 10 * time.Second
+
+// MaxKeepAliveInterval is the maximum time until we send a packet to keep a connection alive.
+// It should be shorter than the time that NATs clear their mapping.
+const MaxKeepAliveInterval = 20 * time.Second
 
 // RetiredConnectionIDDeleteTimeout is the time we keep closed sessions around in order to retransmit the CONNECTION_CLOSE.
 // after this time all information about the old connection will be deleted
@@ -127,6 +136,16 @@ const MinPacingDelay time.Duration = 100 * time.Microsecond
 // DefaultConnectionIDLength is the connection ID length that is used for multiplexed connections
 // if no other value is configured.
 const DefaultConnectionIDLength = 4
+
+// MaxActiveConnectionIDs is the number of connection IDs that we're storing.
+const MaxActiveConnectionIDs = 4
+
+// MaxIssuedConnectionIDs is the maximum number of connection IDs that we're issuing at the same time.
+const MaxIssuedConnectionIDs = 6
+
+// PacketsPerConnectionID is the number of packets we send using one connection ID.
+// If the peer provices us with enough new connection IDs, we switch to a new connection ID.
+const PacketsPerConnectionID = 10000
 
 // AckDelayExponent is the ack delay exponent used when sending ACKs.
 const AckDelayExponent = 3
